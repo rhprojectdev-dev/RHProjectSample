@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RH AUDIO SPLITTER</title>
+<style>
+  :root {
+    --black: #000000;
+    --panel: #120000;
+    --panel-2: #1a0202;
+    --red: #7a0007;
+    --red-bright: #c40010;
+    --white: #ffffff;
+    --dim: #8a8a8a;
+    --line: #3a0a0a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--black);
+    color: var(--white);
+    font-family: 'Oswald', 'Arial Narrow', Helvetica, sans-serif;
+    min-height: 100%;
+  }
+  body { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .mono { font-family: 'Courier New', Consolas, monospace; }
+
+  .wrap { max-width: 960px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  header.hero {
+    border-bottom: 3px solid var(--red);
+    padding-bottom: 28px;
+    margin-bottom: 36px;
+    position: relative;
+  }
+  header.hero::before {
+    content: ""; position: absolute; left: 0; top: 0;
+    width: 64px; height: 6px; background: var(--red-bright);
+  }
+  h1 {
+    font-size: clamp(2rem, 6.5vw, 3.2rem);
+    letter-spacing: 0.5px; margin: 18px 0 10px; line-height: 1.02;
+    text-transform: uppercase; font-weight: 700;
+  }
+  h1 span { color: var(--red-bright); }
+  .lede {
+    color: var(--dim); font-size: 1.02rem; max-width: 60ch; line-height: 1.55;
+    font-family: Georgia, 'Times New Roman', serif;
+  }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); padding: 28px; margin-bottom: 24px; }
+
+  .drop {
+    border: 2px dashed var(--line); background: var(--panel-2);
+    padding: 42px 20px; text-align: center; cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .drop.drag { border-color: var(--red-bright); background: #230303; }
+  .drop .big { font-size: 1.3rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .drop .small { color: var(--dim); font-size: 0.88rem; font-family: Georgia, serif; }
+  input[type="file"] { display: none; }
+
+  .hidden { display: none !important; }
+
+  .fileinfo {
+    display: flex; gap: 24px; flex-wrap: wrap; margin-top: 18px;
+    font-family: Georgia, serif; color: var(--dim); font-size: 0.86rem;
+  }
+  .fileinfo b { color: var(--white); }
+
+  .waveWrap { position: relative; margin-top: 20px; border: 1px solid var(--line); background: var(--black); }
+  canvas#wave { display: block; width: 100%; height: 160px; cursor: crosshair; }
+
+  .tabs { display: flex; gap: 2px; margin-top: 24px; border-bottom: 1px solid var(--line); }
+  .tab {
+    padding: 10px 18px; background: var(--panel-2); color: var(--dim);
+    cursor: pointer; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 1px;
+    border: 1px solid var(--line); border-bottom: none;
+  }
+  .tab.active { background: var(--red); color: var(--white); }
+
+  .tabBody { padding: 20px 0 4px; }
+  .tabPane { display: none; }
+  .tabPane.active { display: block; }
+
+  .fieldRow { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
+  .field { flex: 1; min-width: 160px; }
+  label.field-label {
+    display: block; font-size: 0.75rem; text-transform: uppercase;
+    letter-spacing: 1.5px; color: var(--dim); margin-bottom: 6px;
+  }
+  input[type="number"], input[type="text"] {
+    width: 100%; background: var(--black); border: 1px solid var(--line); color: var(--white);
+    padding: 11px 13px; font-size: 0.95rem; font-family: 'Courier New', monospace;
+  }
+  input[type="number"]:focus, input[type="text"]:focus { outline: none; border-color: var(--red-bright); }
+
+  button.cta {
+    background: var(--red); color: var(--white); border: none;
+    padding: 13px 24px; font-size: 0.88rem; text-transform: uppercase; letter-spacing: 1.5px;
+    font-weight: 700; cursor: pointer; font-family: inherit; transition: background .12s ease;
+  }
+  button.cta:hover { background: var(--red-bright); }
+  button.cta:disabled { background: var(--line); color: var(--dim); cursor: not-allowed; }
+  button.ghost {
+    background: transparent; color: var(--white); border: 1px solid var(--line);
+    padding: 13px 20px; text-transform: uppercase; letter-spacing: 1.5px; font-size: 0.8rem;
+    cursor: pointer; font-family: inherit;
+  }
+  button.ghost:hover { border-color: var(--red-bright); color: var(--red-bright); }
+  button.small {
+    background: var(--panel-2); color: var(--white); border: 1px solid var(--line);
+    padding: 6px 12px; font-size: 0.75rem; cursor: pointer; font-family: inherit;
+  }
+  button.small:hover { border-color: var(--red-bright); }
+
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; align-items: center; }
+
+  .note { font-family: Georgia, serif; color: var(--dim); font-size: 0.86rem; line-height: 1.6; margin-top: 10px; }
+  .note b { color: var(--white); }
+
+  .segList { margin-top: 20px; border: 1px solid var(--line); }
+  .segRow {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px; border-bottom: 1px solid var(--line);
+    background: var(--panel-2); font-family: 'Courier New', monospace; font-size: 0.82rem;
+  }
+  .segRow:last-child { border-bottom: none; }
+  .segRow .idx { color: var(--red-bright); font-weight: 700; width: 50px; }
+  .segRow .time { color: var(--dim); flex: 1; }
+  .segRow .dur { color: var(--white); width: 90px; }
+
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line); margin-top: 18px;
+  }
+  .stat { background: var(--panel-2); padding: 14px 12px; }
+  .stat .n { font-size: 1.5rem; font-weight: 700; color: var(--white); }
+  .stat .l { color: var(--dim); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+
+  footer { color: var(--dim); font-size: 0.78rem; text-align: center; margin-top: 40px; font-family: Georgia, serif; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <h1>SAMPLE → <span>SOUND</span></h1>
+    <p class="lede">Upload 1 file audio, potong jadi banyak bagian kecil (per nada), download semua sekaligus siap upload ke Roblox jadi Sound "1" sampe "N".</p>
+  </header>
+
+  <div class="panel">
+    <div class="drop" id="drop">
+      <div class="big" id="dropText">Taro file audio disini, atau klik buat pilih</div>
+      <div class="small" id="dropFile">belum ada file dipilih (mp3/wav/ogg/m4a)</div>
+      <input type="file" id="fileInput" accept="audio/*">
+    </div>
+    <div class="fileinfo hidden" id="fileInfo">
+      <div>Durasi: <b id="infoDur">-</b></div>
+      <div>Sample rate: <b id="infoRate">-</b></div>
+      <div>Channel: <b id="infoChannels">-</b></div>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="editPanel">
+    <div class="waveWrap">
+      <canvas id="wave"></canvas>
+    </div>
+    <p class="note">Klik di gelombang buat <b>nambah</b> garis potong. Klik deket garis yang udah ada buat <b>hapus</b>.</p>
+
+    <div class="tabs">
+      <div class="tab active" data-tab="rata">Potong Rata</div>
+      <div class="tab" data-tab="jeda">Deteksi Jeda</div>
+    </div>
+    <div class="tabBody">
+      <div class="tabPane active" id="pane-rata">
+        <div class="fieldRow">
+          <div class="field">
+            <label class="field-label">Jumlah potongan</label>
+            <input type="number" id="rataCount" value="60" min="2" max="500">
+          </div>
+          <button class="cta" id="btnRata">Generate</button>
+        </div>
+      </div>
+      <div class="tabPane" id="pane-jeda">
+        <div class="fieldRow">
+          <div class="field">
+            <label class="field-label">Threshold sepi (dB, makin kecil makin sensitif)</label>
+            <input type="number" id="jedaThreshold" value="-40">
+          </div>
+          <div class="field">
+            <label class="field-label">Minimal jeda (ms)</label>
+            <input type="number" id="jedaMinMs" value="150" min="20">
+          </div>
+          <button class="cta" id="btnJeda">Deteksi</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="ghost" id="btnClear">Hapus semua garis</button>
+    </div>
+
+    <div class="stats" id="segStats"></div>
+    <div class="segList" id="segList"></div>
+
+    <div class="row" style="margin-top:22px;">
+      <div class="field" style="max-width:160px;">
+        <label class="field-label">Nama mulai dari nomor</label>
+        <input type="number" id="startNum" value="1" min="1">
+      </div>
+      <button class="cta" id="btnExport" style="align-self:flex-end;">Download semua (.zip)</button>
+    </div>
+    <p class="note" id="exportStatus"></p>
+  </div>
+
+  <footer>RH Audio Splitter — semua proses di browser kamu sendiri, gak ada file yang dikirim kemana-mana.</footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  let audioBuffer = null;
+  let markers = []; // waktu (detik), ga termasuk 0 dan total durasi
+  let previewSource = null;
+
+  const drop = document.getElementById("drop");
+  const fileInput = document.getElementById("fileInput");
+  const dropText = document.getElementById("dropText");
+  const dropFile = document.getElementById("dropFile");
+  const fileInfo = document.getElementById("fileInfo");
+  const editPanel = document.getElementById("editPanel");
+  const canvas = document.getElementById("wave");
+  const ctx = canvas.getContext("2d");
+  const segStats = document.getElementById("segStats");
+  const segList = document.getElementById("segList");
+  const exportStatus = document.getElementById("exportStatus");
+
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  // =============================================
+  // LOAD FILE
+  // =============================================
+  function handleFile(file) {
+    if (!file) return;
+    dropFile.textContent = file.name;
+    dropText.textContent = "Lagi diproses...";
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      audioCtx.decodeAudioData(e.target.result.slice(0), function (buf) {
+        audioBuffer = buf;
+        markers = [];
+        dropText.textContent = "Berhasil! Taro file lain buat ganti";
+
+        document.getElementById("infoDur").textContent = buf.duration.toFixed(2) + "s";
+        document.getElementById("infoRate").textContent = buf.sampleRate + " Hz";
+        document.getElementById("infoChannels").textContent = buf.numberOfChannels;
+        fileInfo.classList.remove("hidden");
+        editPanel.classList.remove("hidden");
+
+        resizeCanvas();
+        drawWave();
+        renderSegments();
+      }, function (err) {
+        dropText.textContent = "Gagal decode audio: " + (err && err.message ? err.message : "format ga didukung");
+      });
+    };
+    reader.onerror = function () {
+      dropText.textContent = "Gagal baca file";
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  drop.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", (e) => handleFile(e.target.files[0]));
+  ["dragenter", "dragover"].forEach(evt =>
+    drop.addEventListener(evt, (e) => { e.preventDefault(); drop.classList.add("drag"); })
+  );
+  ["dragleave", "drop"].forEach(evt =>
+    drop.addEventListener(evt, (e) => { e.preventDefault(); drop.classList.remove("drag"); })
+  );
+  drop.addEventListener("drop", (e) => {
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+
+  // =============================================
+  // WAVEFORM DRAW
+  // =============================================
+  function resizeCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.max(rect.width, 300) * 2;
+    canvas.height = 160 * 2;
+  }
+  window.addEventListener("resize", () => { if (audioBuffer) { resizeCanvas(); drawWave(); } });
+
+  function getMonoData() {
+    const ch0 = audioBuffer.getChannelData(0);
+    if (audioBuffer.numberOfChannels === 1) return ch0;
+    const ch1 = audioBuffer.getChannelData(1);
+    const mono = new Float32Array(ch0.length);
+    for (let i = 0; i < ch0.length; i++) mono[i] = (ch0[i] + ch1[i]) / 2;
+    return mono;
+  }
+
+  function drawWave() {
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, w, h);
+
+    const data = getMonoData();
+    const step = Math.ceil(data.length / w);
+    const mid = h / 2;
+
+    ctx.strokeStyle = "#c40010";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let x = 0; x < w; x++) {
+      let min = 1.0, max = -1.0;
+      const start = x * step;
+      for (let i = 0; i < step; i++) {
+        const idx = start + i;
+        if (idx >= data.length) break;
+        const v = data[idx];
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+      ctx.moveTo(x, mid + min * mid * 0.95);
+      ctx.lineTo(x, mid + max * mid * 0.95);
+    }
+    ctx.stroke();
+
+    // garis tengah
+    ctx.strokeStyle = "#3a0a0a";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, mid);
+    ctx.lineTo(w, mid);
+    ctx.stroke();
+
+    // marker
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    for (const t of markers) {
+      const x = (t / audioBuffer.duration) * w;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+  }
+
+  canvas.addEventListener("click", function (e) {
+    if (!audioBuffer) return;
+    const rect = canvas.getBoundingClientRect();
+    const xRatio = (e.clientX - rect.left) / rect.width;
+    const t = xRatio * audioBuffer.duration;
+
+    const tolerance = audioBuffer.duration * 0.012; // ~1.2% lebar buat toleransi klik hapus
+    let nearestIdx = -1, nearestDist = Infinity;
+    markers.forEach((m, i) => {
+      const d = Math.abs(m - t);
+      if (d < nearestDist) { nearestDist = d; nearestIdx = i; }
+    });
+
+    if (nearestIdx >= 0 && nearestDist < tolerance) {
+      markers.splice(nearestIdx, 1);
+    } else {
+      markers.push(t);
+      markers.sort((a, b) => a - b);
+    }
+    drawWave();
+    renderSegments();
+  });
+
+  // =============================================
+  // POTONG RATA
+  // =============================================
+  document.getElementById("btnRata").addEventListener("click", function () {
+    if (!audioBuffer) return;
+    const n = parseInt(document.getElementById("rataCount").value, 10) || 2;
+    markers = [];
+    for (let i = 1; i < n; i++) {
+      markers.push((audioBuffer.duration / n) * i);
+    }
+    drawWave();
+    renderSegments();
+  });
+
+  // =============================================
+  // DETEKSI JEDA (silence detection)
+  // =============================================
+  document.getElementById("btnJeda").addEventListener("click", function () {
+    if (!audioBuffer) return;
+    const thresholdDb = parseFloat(document.getElementById("jedaThreshold").value) || -40;
+    const minMs = parseFloat(document.getElementById("jedaMinMs").value) || 150;
+    const thresholdAmp = Math.pow(10, thresholdDb / 20);
+
+    const data = getMonoData();
+    const sr = audioBuffer.sampleRate;
+    const windowSize = Math.max(1, Math.floor(sr * 0.01)); // window 10ms
+    const minSilenceWindows = Math.ceil((minMs / 1000) / (windowSize / sr));
+
+    const silent = [];
+    for (let i = 0; i < data.length; i += windowSize) {
+      let peak = 0;
+      for (let j = i; j < Math.min(i + windowSize, data.length); j++) {
+        const v = Math.abs(data[j]);
+        if (v > peak) peak = v;
+      }
+      silent.push(peak < thresholdAmp);
+    }
+
+    const newMarkers = [];
+    let runStart = -1;
+    for (let i = 0; i < silent.length; i++) {
+      if (silent[i]) {
+        if (runStart === -1) runStart = i;
+      } else {
+        if (runStart !== -1) {
+          const runLen = i - runStart;
+          if (runLen >= minSilenceWindows) {
+            const midWindow = runStart + runLen / 2;
+            const t = (midWindow * windowSize) / sr;
+            if (t > 0.05 && t < audioBuffer.duration - 0.05) newMarkers.push(t);
+          }
+          runStart = -1;
+        }
+      }
+    }
+
+    markers = newMarkers;
+    drawWave();
+    renderSegments();
+  });
+
+  document.getElementById("btnClear").addEventListener("click", function () {
+    markers = [];
+    drawWave();
+    renderSegments();
+  });
+
+  // =============================================
+  // TABS
+  // =============================================
+  document.querySelectorAll(".tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".tabPane").forEach(p => p.classList.remove("active"));
+      tab.classList.add("active");
+      document.getElementById("pane-" + tab.dataset.tab).classList.add("active");
+    });
+  });
+
+  // =============================================
+  // SEGMENT LIST
+  // =============================================
+  function getSegments() {
+    const bounds = [0, ...markers, audioBuffer.duration];
+    const segs = [];
+    for (let i = 0; i < bounds.length - 1; i++) {
+      segs.push({ start: bounds[i], end: bounds[i + 1] });
+    }
+    return segs;
+  }
+
+  function fmtTime(t) {
+    const m = Math.floor(t / 60);
+    const s = (t % 60).toFixed(2);
+    return m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  function renderSegments() {
+    if (!audioBuffer) return;
+    const segs = getSegments();
+
+    segStats.innerHTML =
+      '<div class="stat"><div class="n">' + segs.length + '</div><div class="l">Total Potongan</div></div>' +
+      '<div class="stat"><div class="n">' + audioBuffer.duration.toFixed(1) + '</div><div class="l">Durasi (detik)</div></div>' +
+      '<div class="stat"><div class="n">' + (segs.length ? (audioBuffer.duration / segs.length).toFixed(2) : "-") + '</div><div class="l">Rata2/Potongan</div></div>';
+
+    segList.innerHTML = "";
+    segs.forEach((seg, i) => {
+      const row = document.createElement("div");
+      row.className = "segRow";
+      row.innerHTML =
+        '<span class="idx">#' + (i + 1) + '</span>' +
+        '<span class="time">' + fmtTime(seg.start) + ' &rarr; ' + fmtTime(seg.end) + '</span>' +
+        '<span class="dur">' + (seg.end - seg.start).toFixed(2) + 's</span>' +
+        '<button class="small" data-play="' + i + '">▶ Preview</button>';
+      segList.appendChild(row);
+    });
+
+    segList.querySelectorAll("[data-play]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const i = parseInt(btn.dataset.play, 10);
+        playSegment(segs[i]);
+      });
+    });
+  }
+
+  function playSegment(seg) {
+    if (previewSource) { try { previewSource.stop(); } catch (e) {} }
+    const src = audioCtx.createBufferSource();
+    src.buffer = audioBuffer;
+    src.connect(audioCtx.destination);
+    src.start(0, seg.start, seg.end - seg.start);
+    previewSource = src;
+  }
+
+  // =============================================
+  // WAV ENCODE
+  // =============================================
+  function segmentToWav(buf, startSec, endSec) {
+    const sr = buf.sampleRate;
+    const numChannels = buf.numberOfChannels;
+    const startSample = Math.floor(startSec * sr);
+    const endSample = Math.floor(endSec * sr);
+    const length = Math.max(0, endSample - startSample);
+    const blockAlign = numChannels * 2;
+    const dataSize = length * blockAlign;
+
+    const arrBuf = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(arrBuf);
+
+    function writeStr(offset, str) {
+      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    }
+
+    writeStr(0, "RIFF");
+    view.setUint32(4, 36 + dataSize, true);
+    writeStr(8, "WAVE");
+    writeStr(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sr, true);
+    view.setUint32(28, sr * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, 16, true);
+    writeStr(36, "data");
+    view.setUint32(40, dataSize, true);
+
+    const channelData = [];
+    for (let c = 0; c < numChannels; c++) channelData.push(buf.getChannelData(c));
+
+    let offset = 44;
+    for (let i = 0; i < length; i++) {
+      for (let c = 0; c < numChannels; c++) {
+        let sample = channelData[c][startSample + i] || 0;
+        sample = Math.max(-1, Math.min(1, sample));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+        offset += 2;
+      }
+    }
+
+    return new Uint8Array(arrBuf);
+  }
+
+  // =============================================
+  // ZIP WRITER (store / no compression, pure JS)
+  // =============================================
+  const CRC_TABLE = (function () {
+    const table = [];
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      table[n] = c >>> 0;
+    }
+    return table;
+  })();
+
+  function crc32(bytes) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) {
+      crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ bytes[i]) & 0xFF];
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  function buildZip(files) {
+    const localParts = [];
+    const centralParts = [];
+    let offset = 0;
+
+    for (const f of files) {
+      const nameBytes = new TextEncoder().encode(f.name);
+      const data = f.data;
+      const crc = crc32(data);
+      const size = data.length;
+
+      const local = new DataView(new ArrayBuffer(30));
+      local.setUint32(0, 0x04034b50, true);
+      local.setUint16(4, 20, true);
+      local.setUint16(6, 0, true);
+      local.setUint16(8, 0, true);
+      local.setUint16(10, 0, true);
+      local.setUint16(12, 0, true);
+      local.setUint32(14, crc, true);
+      local.setUint32(18, size, true);
+      local.setUint32(22, size, true);
+      local.setUint16(26, nameBytes.length, true);
+      local.setUint16(28, 0, true);
+
+      const localHeader = new Uint8Array(local.buffer);
+      localParts.push(localHeader, nameBytes, data);
+
+      const central = new DataView(new ArrayBuffer(46));
+      central.setUint32(0, 0x02014b50, true);
+      central.setUint16(4, 20, true);
+      central.setUint16(6, 20, true);
+      central.setUint16(8, 0, true);
+      central.setUint16(10, 0, true);
+      central.setUint16(12, 0, true);
+      central.setUint16(14, 0, true);
+      central.setUint32(16, crc, true);
+      central.setUint32(20, size, true);
+      central.setUint32(24, size, true);
+      central.setUint16(28, nameBytes.length, true);
+      central.setUint16(30, 0, true);
+      central.setUint16(32, 0, true);
+      central.setUint16(34, 0, true);
+      central.setUint16(36, 0, true);
+      central.setUint32(38, 0, true);
+      central.setUint32(42, offset, true);
+
+      centralParts.push(new Uint8Array(central.buffer), nameBytes);
+
+      offset += localHeader.length + nameBytes.length + size;
+    }
+
+    let centralSize = 0;
+    for (const p of centralParts) centralSize += p.length;
+    const centralOffset = offset;
+
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true);
+    end.setUint16(4, 0, true);
+    end.setUint16(6, 0, true);
+    end.setUint16(8, files.length, true);
+    end.setUint16(10, files.length, true);
+    end.setUint32(12, centralSize, true);
+    end.setUint32(16, centralOffset, true);
+    end.setUint16(20, 0, true);
+
+    const allParts = [...localParts, ...centralParts, new Uint8Array(end.buffer)];
+    let totalLen = 0;
+    for (const p of allParts) totalLen += p.length;
+    const result = new Uint8Array(totalLen);
+    let pos = 0;
+    for (const p of allParts) { result.set(p, pos); pos += p.length; }
+    return result;
+  }
+
+  // =============================================
+  // EXPORT
+  // =============================================
+  document.getElementById("btnExport").addEventListener("click", function () {
+    if (!audioBuffer) return;
+    const segs = getSegments();
+    const startNum = parseInt(document.getElementById("startNum").value, 10) || 1;
+
+    exportStatus.textContent = "Lagi nyiapin " + segs.length + " file...";
+
+    setTimeout(() => {
+      const files = segs.map((seg, i) => ({
+        name: (startNum + i) + ".wav",
+        data: segmentToWav(audioBuffer, seg.start, seg.end)
+      }));
+
+      const zipBytes = buildZip(files);
+      const blob = new Blob([zipBytes], { type: "application/zip" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "samples.zip";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      exportStatus.textContent = "Selesai! " + segs.length + " file ke-download (samples.zip).";
+    }, 50);
+  });
+})();
+</script>
+</body>
+</html>
