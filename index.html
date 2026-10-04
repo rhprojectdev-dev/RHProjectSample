@@ -172,6 +172,7 @@
     <div class="tabs">
       <div class="tab active" data-tab="rata">Potong Rata</div>
       <div class="tab" data-tab="jeda">Deteksi Jeda</div>
+      <div class="tab" data-tab="auto">Buang Kosong</div>
     </div>
     <div class="tabBody">
       <div class="tabPane active" id="pane-rata">
@@ -194,6 +195,24 @@
             <input type="number" id="jedaMinMs" value="150" min="20">
           </div>
           <button class="cta" id="btnJeda">Deteksi</button>
+        </div>
+      </div>
+      <div class="tabPane" id="pane-auto">
+        <p class="note" style="margin-top:0;">Bagian yang <b>ada bunyinya</b> otomatis jadi potongan, bagian yang <b>kosong/sepi dibuang total</b> (ga ikut ke output sama sekali).</p>
+        <div class="fieldRow">
+          <div class="field">
+            <label class="field-label">Threshold suara (dB, makin kecil makin sensitif nangkep bunyi pelan)</label>
+            <input type="number" id="autoThreshold" value="-40">
+          </div>
+          <div class="field">
+            <label class="field-label">Minimal durasi bunyi (ms, buang noise sekilas)</label>
+            <input type="number" id="autoMinMs" value="80" min="10">
+          </div>
+          <div class="field">
+            <label class="field-label">Padding (ms, sisain dikit di ujung biar ga kepotong mepet)</label>
+            <input type="number" id="autoPaddingMs" value="20" min="0">
+          </div>
+          <button class="cta" id="btnAuto">Potong Otomatis</button>
         </div>
       </div>
     </div>
@@ -223,7 +242,8 @@
   "use strict";
 
   let audioBuffer = null;
-  let markers = []; // waktu (detik), ga termasuk 0 dan total durasi
+  let markers = []; // waktu (detik), ga termasuk 0 dan total durasi -- dipake pas mode "split"
+  let autoSegments = null; // {start,end}[] -- dipake pas mode "Buang Kosong", ga nutupin seluruh durasi (ada gap)
   let previewSource = null;
 
   const drop = document.getElementById("drop");
@@ -341,20 +361,39 @@
     ctx.lineTo(w, mid);
     ctx.stroke();
 
-    // marker
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 2;
-    for (const t of markers) {
-      const x = (t / audioBuffer.duration) * w;
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, h);
-      ctx.stroke();
+    if (autoSegments) {
+      // mode "Buang Kosong": highlight bagian yg KEPAKE, sisanya gelap (dibuang)
+      ctx.fillStyle = "rgba(196, 0, 16, 0.28)";
+      for (const seg of autoSegments) {
+        const x1 = (seg.start / audioBuffer.duration) * w;
+        const x2 = (seg.end / audioBuffer.duration) * w;
+        ctx.fillRect(x1, 0, Math.max(x2 - x1, 1), h);
+      }
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      for (const seg of autoSegments) {
+        const x1 = (seg.start / audioBuffer.duration) * w;
+        const x2 = (seg.end / audioBuffer.duration) * w;
+        ctx.beginPath(); ctx.moveTo(x1, 0); ctx.lineTo(x1, h); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x2, 0); ctx.lineTo(x2, h); ctx.stroke();
+      }
+    } else {
+      // mode "split": garis marker biasa
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      for (const t of markers) {
+        const x = (t / audioBuffer.duration) * w;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+      }
     }
   }
 
   canvas.addEventListener("click", function (e) {
     if (!audioBuffer) return;
+    if (autoSegments) { autoSegments = null; markers = []; } // klik manual = balik ke mode split
     const rect = canvas.getBoundingClientRect();
     const xRatio = (e.clientX - rect.left) / rect.width;
     const t = xRatio * audioBuffer.duration;
@@ -381,6 +420,7 @@
   // =============================================
   document.getElementById("btnRata").addEventListener("click", function () {
     if (!audioBuffer) return;
+    autoSegments = null;
     const n = parseInt(document.getElementById("rataCount").value, 10) || 2;
     markers = [];
     for (let i = 1; i < n; i++) {
@@ -395,6 +435,7 @@
   // =============================================
   document.getElementById("btnJeda").addEventListener("click", function () {
     if (!audioBuffer) return;
+    autoSegments = null;
     const thresholdDb = parseFloat(document.getElementById("jedaThreshold").value) || -40;
     const minMs = parseFloat(document.getElementById("jedaMinMs").value) || 150;
     const thresholdAmp = Math.pow(10, thresholdDb / 20);
@@ -439,6 +480,77 @@
 
   document.getElementById("btnClear").addEventListener("click", function () {
     markers = [];
+    autoSegments = null;
+    drawWave();
+    renderSegments();
+  });
+
+  // =============================================
+  // BUANG KOSONG (auto-detect sound islands, silence dibuang total)
+  // =============================================
+  document.getElementById("btnAuto").addEventListener("click", function () {
+    if (!audioBuffer) return;
+    const thresholdDb = parseFloat(document.getElementById("autoThreshold").value) || -40;
+    const minMs = parseFloat(document.getElementById("autoMinMs").value) || 80;
+    const paddingMs = parseFloat(document.getElementById("autoPaddingMs").value) || 0;
+    const thresholdAmp = Math.pow(10, thresholdDb / 20);
+    const padding = paddingMs / 1000;
+
+    const data = getMonoData();
+    const sr = audioBuffer.sampleRate;
+    const windowSize = Math.max(1, Math.floor(sr * 0.01)); // window 10ms
+    const minSoundWindows = Math.ceil((minMs / 1000) / (windowSize / sr));
+
+    const isSound = [];
+    for (let i = 0; i < data.length; i += windowSize) {
+      let peak = 0;
+      for (let j = i; j < Math.min(i + windowSize, data.length); j++) {
+        const v = Math.abs(data[j]);
+        if (v > peak) peak = v;
+      }
+      isSound.push(peak >= thresholdAmp);
+    }
+
+    const islands = [];
+    let runStart = -1;
+    for (let i = 0; i < isSound.length; i++) {
+      if (isSound[i]) {
+        if (runStart === -1) runStart = i;
+      } else if (runStart !== -1) {
+        const runLen = i - runStart;
+        if (runLen >= minSoundWindows) {
+          let start = Math.max(0, (runStart * windowSize) / sr - padding);
+          let end = Math.min(audioBuffer.duration, (i * windowSize) / sr + padding);
+          islands.push({ start, end });
+        }
+        runStart = -1;
+      }
+    }
+    if (runStart !== -1 && isSound.length - runStart >= minSoundWindows) {
+      islands.push({
+        start: Math.max(0, (runStart * windowSize) / sr - padding),
+        end: audioBuffer.duration
+      });
+    }
+
+    // gabung kalo padding bikin 2 island numpuk
+    islands.sort((a, b) => a.start - b.start);
+    const merged = [];
+    for (const isl of islands) {
+      if (merged.length && isl.start <= merged[merged.length - 1].end) {
+        merged[merged.length - 1].end = Math.max(merged[merged.length - 1].end, isl.end);
+      } else {
+        merged.push({ start: isl.start, end: isl.end });
+      }
+    }
+
+    if (merged.length === 0) {
+      exportStatus.textContent = "Ga ketemu bagian yang ada bunyinya, coba turunin threshold-nya.";
+      return;
+    }
+
+    autoSegments = merged;
+    markers = [];
     drawWave();
     renderSegments();
   });
@@ -459,6 +571,7 @@
   // SEGMENT LIST
   // =============================================
   function getSegments() {
+    if (autoSegments) return autoSegments;
     const bounds = [0, ...markers, audioBuffer.duration];
     const segs = [];
     for (let i = 0; i < bounds.length - 1; i++) {
@@ -477,10 +590,13 @@
     if (!audioBuffer) return;
     const segs = getSegments();
 
+    const keptDuration = segs.reduce((sum, s) => sum + (s.end - s.start), 0);
+
     segStats.innerHTML =
       '<div class="stat"><div class="n">' + segs.length + '</div><div class="l">Total Potongan</div></div>' +
-      '<div class="stat"><div class="n">' + audioBuffer.duration.toFixed(1) + '</div><div class="l">Durasi (detik)</div></div>' +
-      '<div class="stat"><div class="n">' + (segs.length ? (audioBuffer.duration / segs.length).toFixed(2) : "-") + '</div><div class="l">Rata2/Potongan</div></div>';
+      '<div class="stat"><div class="n">' + audioBuffer.duration.toFixed(1) + '</div><div class="l">Durasi Asli (detik)</div></div>' +
+      '<div class="stat"><div class="n">' + (segs.length ? (keptDuration / segs.length).toFixed(2) : "-") + '</div><div class="l">Rata2/Potongan</div></div>' +
+      (autoSegments ? '<div class="stat"><div class="n">' + keptDuration.toFixed(1) + '</div><div class="l">Total Durasi Kepake</div></div>' : '');
 
     segList.innerHTML = "";
     segs.forEach((seg, i) => {
